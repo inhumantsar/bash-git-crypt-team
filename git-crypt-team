@@ -1,0 +1,134 @@
+#!/bin/bash
+
+# freak out and die if anything goes wrong
+set -e
+
+COMMIT_PREFIX="git-crypt rekey"
+BACKUP_PATH=".git-crypt-team-backup"
+CONFIG_PATH=".git-crypt-team"
+BRANCH="rekey-git-crypt-$(date +%Y%m%d%H%M)"
+ENC_FILE="${BACKUP_PATH}/enc-files.txt"
+TEAM_FILE="${CONFIG_PATH}/teamfile"
+TMP_TEAM_FILE="${CONFIG_PATH}/teamfile-$(date +%Y%m%d%H%M)"
+URL_FILE="${CONFIG_PATH}/url"
+
+# init
+[ ! -d "${CONFIG_PATH}" ] && mkdir "${CONFIG_PATH}"
+[ -f "${CONFIG_PATH}/url" ] && url="$(cat ${URL_FILE})"  || url=""
+grep -q -F "${BACKUP_PATH}/" .gitignore || echo "${BACKUP_PATH}/" >> .gitignore
+preserve=0
+
+usage() {
+  echo "$0 [-h] [-v] [-u S3 url] [-p]"
+  echo ""
+  echo "Rekey git-crypt'd repo with a userlist stored in S3"
+  echo ""
+  echo "  -v    - Download and view the team list, then exit."
+  echo "  -u    - Fetch from S3 URL. Only required on first run."
+  echo "  -p    - Preserve unencrypted backups."
+  echo "  -h    - Print this help."
+}
+
+heading() { echo -e "--\n\n--------------------------------------\n-- $@"; }
+gitcommit() { git add . && git commit -am "${COMMIT_PREFIX}: $@"; }
+
+# parse args
+OPTIND=1
+while getopts "hu:pv" opt; do
+    case "$opt" in
+    h)  usage
+        exit 0
+        ;;
+    u)  url=$OPTARG
+        ;;
+    p)  preserve=1
+        ;;
+    v)  view
+        exit 0
+        ;;
+    \:) exit 1
+        ;;
+    \?) exit 1
+        ;;
+    esac
+done
+
+# set up $@ to contain whatever wasn't parsed with getopts
+shift $((OPTIND-1))
+[ "$1" = "--" ] && shift
+
+# pre-flight checks
+[ "${url}" == "" ] && (echo "ERROR: No URL passed or stored in config. Use -u" && usage && exit 1)
+
+heading "Getting latest team file from ${url}..."
+aws s3 cp "${url}" "${TMP_TEAM_FILE}"
+
+heading "Checking new team file..."
+# basic jq parse check
+[ cat "${TMP_TEAM_FILE}" | jq 2> /dev/null ] || (echo "ERROR: New team file fails JSON syntax check!" \
+  && exit 1)
+# compare with old team file
+if [ -f "${TEAM_FILE}" ]; then
+  existingteamfile="$(cat ${TEAM_FILE} | jq '.[] | .key' | sort | sed -e 's/\"//g')"
+  newteamfile="$(cat ${TMP_TEAM_FILE} | jq '.[] | .key' | sort | sed -e 's/\"//g')"
+  [ "$new" == "$existing" ] && (echo "New and existing team files are identical, no action required." \
+    && exit 0)
+fi
+
+heading "Importing GPG keys..."
+gpg --recv-keys $newteamfile
+
+heading "Signing GPG keys..."
+for k in $newteamfile; do
+  gpg --sign-key $k
+done
+
+heading "Pulling latest master branch..."
+git checkout master && git pull
+
+heading "Ensuring git-crypt is initialized and unlocked..."
+[ ! -d '.git-crypt' ] && git-crypt init
+git-crypt unlock
+
+heading "Cutting a fresh branch to work with..."
+git checkout -b $BRANCH
+
+# back up encrypted files and remove them
+heading "Backing up and removing decrypted secure files..."
+mkdir -p "${BACKUP_PATH}"
+git-crypt status | grep -v 'not encrypted' > $ENC_FILE
+for f in `cat $ENC_FILE`; do
+  echo -n "      $(pwd)/${f} -> ${BACKUP_PATH}/${f}..."
+  cp "$(pwd)/${f}" "${BACKUP_PATH}/${f}" && rm "$(pwd)/${f}"
+  echo "ok"
+done
+
+heading "Committing changes..."
+gitcommit "removing encrypted files"
+
+heading "Clearing git-crypt configuration..."
+rm -rf .git-crypt
+
+heading "Committing changes..."
+gitcommit "clearing git-crypt configuration"
+
+heading "Copying decrypted secure files back into repo..."
+for f in `cat $ENC_FILE`; do
+  echo -n "      ${BACKUP_PATH}/${f} -> $(pwd)/${f}..."
+  cp "${BACKUP_PATH}/${f}" "$(pwd)/${f}"
+  echo "ok"
+done
+
+heading "Re-initializing git-crypt..."
+git-crypt init
+
+heading "Re-adding team to git-crypt..."
+git-crypt $newteamfile
+
+heading "Replacing old team and url files with new ones..."
+mv "${TMP_TEAM_FILE}" "${TEAM_FILE}"
+echo "${url}" > "${URL_FILE}"
+
+heading "Committing final changes and pushing branch..."
+gitcommit "finished"
+git push -u origin "${BRANCH}"
