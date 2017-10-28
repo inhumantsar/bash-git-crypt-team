@@ -1,16 +1,24 @@
-# sample-app
+# git-crypt-team
 
-Quickly (and dirtily) parses out the content from Wikipedia articles.
+Handle key updates for git-crypt repos by sourcing key IDs from a JSON file on S3.
 
 ## Usage
 
 ```
-./sample-app [-h] [-v] [-u url] [-r regex]
+git-crypt-team [-h] [-u S3 url] [-s] [-p] -v|e|r
 
-  -u    - (optional) Fetch a specific Wikipedia article. Defaults to random
-  -r    - (optional) DIY regex. Defaults to s/<[^>]*>//g
-  -v    - More noise.
-  -h    - Print this help.
+Rekey git-crypt'd repo with a userlist stored in S3
+
+Operations - defaults to -v
+  -v    - Download and view the latest team list, then exit.
+  -e    - Edit the team list and upload it to S3.
+  -r    - Rekey the repo using the latest team list from S3.
+
+Options
+  -u    - S3 URL for the team list. Only required on first run.
+  -p    - Preserve unencrypted backups. Only valid with -r
+  -s    - Skip remote git operations (ie: push & pull).
+  -h    - Print this help and exit.
 ```
 
 ## Development
