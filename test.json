@@ -1,7 +1,9 @@
 [
-  { "email": "moo@moo.moo", "key": "ABCDE123" },
-  { "email": "oom@oom.oom", "key": "BADS1233" },
-  { "email": "too@too.too", "key": "BFBFSB123" },
-  { "email": "three@three.three", "key": "ABCBCB12" },
-  { "email": "four@four.four", "key": "BCDEA321" }
+  {
+    "key": "BDE148ED"
+  },
+  {
+    "key": "B58C5FE0"
+  }
 ]
+

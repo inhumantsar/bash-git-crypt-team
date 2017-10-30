@@ -190,6 +190,9 @@ if [ "${url}" == "" ]; then
   exit 1
 fi
 
+aws --version || (echo "ERROR: aws-cli not installed!" && exit 1)
+jq --version || (echo "ERROR: jq not installed!" && exit 1)
+
 echo "Starting git-crypt-team at $(date)"
 
 # do the thing
