@@ -7,7 +7,7 @@ CONFIG_PATH=".git-crypt-team"
 BRANCH="rekey-git-crypt-$(date +%Y%m%d%H%M)"
 ENC_FILE="${BACKUP_PATH}/encfiles"
 TEAM_FILE="${CONFIG_PATH}/teamfile"
-TMP_TEAM_FILE="${CONFIG_PATH}/teamfile-$(date +%Y%m%d%H%M)"
+TMP_TEAM_FILE="${CONFIG_PATH}/tmp-teamfile-$(date +%Y%m%d%H%M)"
 URL_FILE="${CONFIG_PATH}/url"
 
 # init
@@ -17,6 +17,7 @@ URL_FILE="${CONFIG_PATH}/url"
 rm $CONFIG_PATH/teamfile-* &> /dev/null
 preserve=0
 skipgit=0
+force=0
 action="view"
 
 # freak out and die if anything exits non-zero
@@ -33,9 +34,10 @@ usage() {
   echo "  -r    - Rekey the repo using the latest team list from S3."
   echo ""
   echo "Options"
-  echo "  -u    - S3 URL for the team list. Only required on first run."
+  echo "  -f    - Force the rekey operation"
   echo "  -p    - Preserve unencrypted backups. Only valid with -r"
   echo "  -s    - Skip remote git operations (ie: push & pull)."
+  echo "  -u    - S3 URL for the team list. eg: s3://somebucket/somepath/somefile.json Only required on first run."
   echo "  -h    - Print this help and exit."
 }
 
@@ -56,8 +58,12 @@ edit_team_file() {
   set -e
   heading "Passing file to editor..."
   vim "${TMP_TEAM_FILE}"
-  echo -n "Changes will be lost of not uploaded. Upload changes to S3? [Ny] " && read yn
-  [ $(echo "${yn}" | grep -i "Y") ] && aws s3 cp "${TMP_TEAM_FILE}" "${url}"
+  echo -n "Changes will be lost if not uploaded. Upload? [Ny] " && read yn
+  if [ $(echo "${yn}" | grep -i "Y") ]; then
+    heading "Uploading..."
+    aws s3 cp "${TMP_TEAM_FILE}" "${url}"
+    mv "${TMP_TEAM_FILE}" "${TEAM_FILE}"
+  fi
 }
 
 rekey() {
@@ -71,7 +77,7 @@ rekey() {
   newteamfile="$(cat ${TMP_TEAM_FILE} | jq '.[] | .key' | sort | sed -e 's/\"//g')"
   if [ -f "${TEAM_FILE}" ]; then
     existingteamfile="$(cat ${TEAM_FILE} | jq '.[] | .key' | sort | sed -e 's/\"//g')"
-    if [ "$new" == "$existing" ]; then
+    if [ "$new" == "$existing" ] && [ $force -eq 0 ]; then
       echo "New and existing team files are identical, no action required."
       exit 0
     else
@@ -147,7 +153,7 @@ rekey() {
 
 # parse args
 OPTIND=1
-while getopts "hu:psver" opt; do
+while getopts "hu:psfver" opt; do
     case "$opt" in
     h)  usage
         exit 0
@@ -157,6 +163,8 @@ while getopts "hu:psver" opt; do
     p)  preserve=1
         ;;
     s)  skipgit=1
+        ;;
+    f)  force=1
         ;;
     v)  action="view"
         ;;
