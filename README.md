@@ -40,6 +40,8 @@ After that first run, the URL will be stored in `.git-crypt-team/url`. The curre
 
 ## Usage
 
+
+
 ```
 git-crypt-team [-h] [-u S3 url] [-s] [-p] -v|e|r
 

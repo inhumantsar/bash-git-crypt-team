@@ -11,7 +11,19 @@ TMP_TEAM_FILE="${CONFIG_PATH}/tmp-teamfile-$(date +%Y%m%d%H%M)"
 URL_FILE="${CONFIG_PATH}/url"
 
 # init
-[ ! -d ".git-crypt" ] && git-crypt init
+gc_dirs=()
+while IFS=  read -r -d $'\0'; do
+    gc_dirs+=("$REPLY")
+done < <(find . -type d -name "*git-crypt" -print0)
+if [ ${#gc_dirs[@]} -gt 1 ]; then
+  echo "Found multiple dirs named '*git-crypt', not sure which to act on."
+  exit 1
+elif [ ${#gc_dirs[@]} -gt 1 ]; then
+  GC_DIR=""
+else
+  GC_DIR=${gc_dirs[0]}
+fi
+
 [ ! -d "${CONFIG_PATH}" ] && mkdir "${CONFIG_PATH}"
 [ -f "${CONFIG_PATH}/url" ] && url="$(cat ${URL_FILE})"  || url=""
 rm $CONFIG_PATH/teamfile-* &> /dev/null
@@ -24,7 +36,7 @@ action="view"
 set -e
 
 usage() {
-  echo "$0 [-h] [-u S3 url] [-s] [-p] -v|e|r"
+  echo "$0 -v|e|r|n [-h] [-u S3 url] [-s] [-p] [-f]"
   echo ""
   echo "Rekey git-crypt'd repo with a userlist stored in S3"
   echo ""
@@ -32,6 +44,7 @@ usage() {
   echo "  -v    - Download and view the latest team list, then exit."
   echo "  -e    - Download and edit the team list, optionally upload changes to S3, then exit."
   echo "  -r    - Rekey the repo using the latest team list from S3."
+  echo "  -n    - Key a new repo using the latest team list from S3."
   echo ""
   echo "Options"
   echo "  -f    - Force the rekey operation"
@@ -67,6 +80,11 @@ edit_team_file() {
 }
 
 rekey() {
+  if [ "${GC_DIR}" == "" ]; then
+    echo "ERROR: No git-crypt directory found. Perhaps you meant to use `-n`?"
+    exit 1
+  fi
+
   get_team_file
 
   heading "Checking new team file..."
@@ -97,10 +115,6 @@ rekey() {
   heading "Pulling latest master branch..."
   ([ $skipgit -eq 0 ] && git checkout master && git pull) || echo 'Skipping checkout and pull.'
 
-  heading "Ensuring git-crypt is initialized and unlocked..."
-  [ ! -d '.git-crypt' ] && git-crypt init
-  git-crypt unlock
-
   heading "Cutting a fresh branch to work with..."
   git checkout -b $BRANCH
 
@@ -120,7 +134,7 @@ rekey() {
   gitcommit "removing encrypted files"
 
   heading "Clearing git-crypt configuration..."
-  rm -rf .git-crypt
+  rm -rf $GC_DIR
 
   heading "Committing changes..."
   gitcommit "clearing git-crypt configuration"
@@ -151,9 +165,51 @@ rekey() {
   fi
 }
 
+new() {
+  heading "Confirming there are no encrypted files currently..."
+  (git-crypt status | grep -v 'not encrypted') && (echo "ERROR: There are encrypted files according to git-crypt, please use `-r` or remove them manually." \
+    && exit 1) || echo 'All good!'
+
+  heading "Initializing git-crypt..."
+  git-crypt init
+
+  get_team_file
+
+  heading "Checking new team file..."
+  # basic jq parse check
+  (cat ${TMP_TEAM_FILE} | jq '.' 1> /dev/null) && echo "Passed parser checks." || (echo "ERROR: New team file fails JSON syntax check!" \
+    && exit 1)
+  echo "Done!"
+  newteamfile="$(cat ${TMP_TEAM_FILE} | jq '.[] | .key' | sort | sed -e 's/\"//g')"
+
+  heading "Importing GPG keys..."
+  gpg --recv-keys $newteamfile
+
+  heading "Signing GPG keys..."
+  for k in $newteamfile; do
+    gpg --sign-key $k
+  done
+
+  heading "Pulling latest master branch..."
+  ([ $skipgit -eq 0 ] && git checkout master && git pull) || echo 'Skipping checkout and pull.'
+
+  heading "Cutting a fresh branch to work with..."
+  git checkout -b $BRANCH
+
+  heading "Adding team to git-crypt..."
+  git-crypt add-gpg-user $newteamfile
+
+  heading "Creating local team file..."
+  mv "${TMP_TEAM_FILE}" "${TEAM_FILE}"
+
+  heading "Committing final changes and pushing branch..."
+  gitcommit "Encryption initialized"
+  ([ $skipgit -eq 0 ] && git push -u origin "${BRANCH}") || echo "Skipping push."
+}
+
 # parse args
 OPTIND=1
-while getopts "hu:psfver" opt; do
+while getopts "hu:psfvern" opt; do
     case "$opt" in
     h)  usage
         exit 0
@@ -171,6 +227,8 @@ while getopts "hu:psfver" opt; do
     e)  action="edit"
         ;;
     r)  action="rekey"
+        ;;
+    n)  action="new"
         ;;
     \:) exit 1
         ;;
@@ -199,6 +257,7 @@ echo "Starting git-crypt-team at $(date)"
 [ "${action}" == "view" ] && view_team_file
 [ "${action}" == "edit" ] && edit_team_file
 [ "${action}" == "rekey" ] && rekey
+[ "${action}" == "new" ] && new
 
 set +e
 exit 0
