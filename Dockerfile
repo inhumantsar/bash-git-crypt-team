@@ -11,7 +11,8 @@ RUN yum -y install epel-release \
     git \
     gpg \
     python-pip \
-    jq \
+    jq \ 
+    libssl-devel \
   && pip install awscli \
   && git clone https://github.com/sstephenson/bats.git /tmp/bats \
   && /tmp/bats/install.sh /usr/local \
