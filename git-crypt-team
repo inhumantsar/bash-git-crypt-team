@@ -85,23 +85,25 @@ rekey() {
     exit 1
   fi
 
+  heading "Ensuring repo is unlocked..."
+  git-crypt unlock
+
+  heading "Cutting a fresh branch to work with..."
+  git checkout -b $BRANCH
+
+  # check for changes, commit them if necessary
+  git update-index -q --refresh
+  if [ ! -z "$(git diff-index --name-only HEAD --)" ]; then
+    heading "Committing changes..."
+    git commit -am 'git-crypt-team rekey: pre-flight commit'
+  fi
+
   get_team_file
 
   heading "Checking new team file..."
   # basic jq parse check
-  (cat ${TMP_TEAM_FILE} | jq '.' 1> /dev/null) && echo "Passed parser checks." || (echo "ERROR: New team file fails JSON syntax check!" \
-    && exit 1)
-  # compare with old team file
   newteamfile="$(cat ${TMP_TEAM_FILE} | jq '.[] | .key' | sort | sed -e 's/\"//g')"
-  if [ -f "${TEAM_FILE}" ]; then
-    existingteamfile="$(cat ${TEAM_FILE} | jq '.[] | .key' | sort | sed -e 's/\"//g')"
-    if [ "$new" == "$existing" ] && [ $force -eq 0 ]; then
-      echo "New and existing team files are identical, no action required."
-      exit 0
-    else
-      echo "Team file has changes to apply"
-    fi
-  fi
+  echo "Found team: ${newteamfile}"
   echo "Done!"
 
   heading "Importing GPG keys..."
@@ -111,12 +113,6 @@ rekey() {
   for k in $newteamfile; do
     gpg --sign-key $k
   done
-
-  heading "Pulling latest master branch..."
-  ([ $skipgit -eq 0 ] && git checkout master && git pull) || echo 'Skipping checkout and pull.'
-
-  heading "Cutting a fresh branch to work with..."
-  git checkout -b $BRANCH
 
   # back up encrypted files and remove them
   heading "Backing up and removing decrypted secure files..."
@@ -146,8 +142,8 @@ rekey() {
     echo "ok"
   done
 
-  # heading "Re-initializing git-crypt..."
-  # git-crypt init
+  heading "Re-initializing git-crypt..."
+  git-crypt init || echo "Seems ok maybe?"
 
   heading "Re-adding team to git-crypt..."
   git-crypt add-gpg-user $newteamfile
@@ -159,10 +155,6 @@ rekey() {
   gitcommit "finished"
   ([ $skipgit -eq 0 ] && git push -u origin "${BRANCH}") || echo "Skipping push."
 
-  if [ $preserve -eq 0 ]; then
-    heading "Removing unencrypted backups..."
-    rm -rf "${BACKUP_PATH}/*"
-  fi
 }
 
 new() {
@@ -179,8 +171,9 @@ new() {
   # basic jq parse check
   (cat ${TMP_TEAM_FILE} | jq '.' 1> /dev/null) && echo "Passed parser checks." || (echo "ERROR: New team file fails JSON syntax check!" \
     && exit 1)
-  echo "Done!"
   newteamfile="$(cat ${TMP_TEAM_FILE} | jq '.[] | .key' | sort | sed -e 's/\"//g')"
+  echo "Found team: ${newteamfile}"
+  echo "Done!"
 
   heading "Importing GPG keys..."
   gpg --recv-keys $newteamfile
@@ -258,6 +251,13 @@ echo "Starting git-crypt-team at $(date)"
 [ "${action}" == "edit" ] && edit_team_file
 [ "${action}" == "rekey" ] && rekey
 [ "${action}" == "new" ] && new
+
+if [ $preserve -eq 0 ]; then
+  heading "Removing unencrypted backups and temp files..."
+  rm -rf "${BACKUP_PATH}/*"
+  rm -rf "${TMP_TEAM_FILE}"
+fi
+
 
 set +e
 exit 0
