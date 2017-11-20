@@ -2,8 +2,8 @@
 
 # constants
 COMMIT_PREFIX="git-crypt rekey"
-BACKUP_PATH=".git-crypt-team-backup"
 CONFIG_PATH=".git-crypt-team"
+BACKUP_PATH="${CONFIG_PATH}/backup"
 BRANCH="rekey-git-crypt-$(date +%Y%m%d%H%M)"
 ENC_FILE="${BACKUP_PATH}/encfiles"
 TEAM_FILE="${CONFIG_PATH}/teamfile"
