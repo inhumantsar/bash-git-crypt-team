@@ -15,13 +15,12 @@ gc_dirs=()
 while IFS=  read -r -d $'\0'; do
     gc_dirs+=("$REPLY")
 done < <(find . -type d -name "*git-crypt" -print0)
-if [ ${#gc_dirs[@]} -gt 1 ]; then
-  echo "Found multiple dirs named '*git-crypt', not sure which to act on."
+#if [ ${#gc_dirs[@]} -gt 1 ]; then
+#  echo "Found multiple dirs named '*git-crypt', not sure which to act on."
+#  exit 1
+if [ ${#gc_dirs[@]} -lt 1 ]; then
+  echo "ERROR: No git-crypt directory found. Perhaps you meant to use `-n`?"
   exit 1
-elif [ ${#gc_dirs[@]} -gt 1 ]; then
-  GC_DIR=""
-else
-  GC_DIR=${gc_dirs[0]}
 fi
 
 [ ! -d "${CONFIG_PATH}" ] && mkdir "${CONFIG_PATH}"
@@ -80,11 +79,6 @@ edit_team_file() {
 }
 
 rekey() {
-  if [ "${GC_DIR}" == "" ]; then
-    echo "ERROR: No git-crypt directory found. Perhaps you meant to use `-n`?"
-    exit 1
-  fi
-
   heading "Ensuring repo is unlocked..."
   git-crypt unlock
 
@@ -130,7 +124,9 @@ rekey() {
   gitcommit "removing encrypted files"
 
   heading "Clearing git-crypt configuration..."
-  rm -rf $GC_DIR
+  for d in $gc_dirs; do
+    rm -rf $d
+  done
 
   heading "Committing changes..."
   gitcommit "clearing git-crypt configuration"
