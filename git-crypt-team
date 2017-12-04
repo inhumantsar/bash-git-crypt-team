@@ -11,17 +11,6 @@ TMP_TEAM_FILE="${CONFIG_PATH}/tmp-teamfile-$(date +%Y%m%d%H%M)"
 URL_FILE="${CONFIG_PATH}/url"
 
 # init
-gc_dirs=()
-while IFS=  read -r -d $'\0'; do
-    gc_dirs+=("$REPLY")
-done < <(find . -type d -name "*git-crypt" -print0)
-#if [ ${#gc_dirs[@]} -gt 1 ]; then
-#  echo "Found multiple dirs named '*git-crypt', not sure which to act on."
-#  exit 1
-if [ ${#gc_dirs[@]} -lt 1 ]; then
-  echo "ERROR: No git-crypt directory found. Perhaps you meant to use `-n`?"
-  exit 1
-fi
 
 [ ! -d "${CONFIG_PATH}" ] && mkdir "${CONFIG_PATH}"
 [ -f "${CONFIG_PATH}/url" ] && url="$(cat ${URL_FILE})"  || url=""
@@ -64,6 +53,22 @@ get_team_file() {
 
 view_team_file() { get_team_file && (cat "${TMP_TEAM_FILE}" | jq '.'); }
 
+find_editor() {
+	if [ "$EDITOR" != "" ]; then
+		GCT_EDITOR="$EDITOR"
+		return
+	fi
+
+	# note my bias, love my bias.
+	common=("/usr/bin/vi" "/usr/bin/vim" "/usr/bin/nano" "/usr/bin/gedit" "/usr/bin/atom")
+	for path in $common; do
+	  if [ -f /usr/bin/vi ]; then
+  	  GCT_EDITOR="${path}"
+			return
+		fi
+	done
+}
+
 edit_team_file() {
   set +e
   get_team_file || echo "WARNING: No remote file found, creating a new one."
@@ -79,6 +84,23 @@ edit_team_file() {
 }
 
 rekey() {
+  # find all git-crypt directories, bail if there are none
+  gc_dirs=()
+  while IFS=  read -r -d $'\0'; do
+      gc_dirs+=("$REPLY")
+  done < <(find . -type d -name "*git-crypt" -print0)
+  if [ ${#gc_dirs[@]} -lt 1 ]; then
+    echo "ERROR: No git-crypt directory found. Perhaps you meant to use `-n`?"
+    exit 1
+  fi
+
+	# find text editor
+	find_editor
+	if [ "$GCT_EDITOR" == "" ]; then
+		echo "ERROR: Unable to find a known text editor. You don't use emacs, do you? ;)"
+		exit 1
+	fi
+
   heading "Ensuring repo is unlocked..."
   git-crypt unlock
 
