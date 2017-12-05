@@ -12,7 +12,6 @@ TMP_TEAM_FILE="${TMP_TEAM_FILE_PREFIX}-$(date +%Y%m%d%H%M%S)"
 URL_FILE="${CONFIG_PATH}/url"
 
 # init
-
 [ ! -d "${CONFIG_PATH}" ] && mkdir "${CONFIG_PATH}"
 [ -f "${CONFIG_PATH}/url" ] && url="$(cat ${URL_FILE})"  || url=""
 rm $CONFIG_PATH/teamfile-* &> /dev/null
@@ -282,8 +281,8 @@ if [ "${url}" == "" ]; then
   exit 1
 fi
 
-aws --version || (echo "ERROR: aws-cli not installed!" && exit 1)
-jq --version || (echo "ERROR: jq not installed!" && exit 1)
+aws --version || (echo "ERROR: aws-cli not installed! Try sudo pip install awscli" && exit 1)
+jq --version || (echo "ERROR: jq not installed! Try yum/apt install jq" && exit 1)
 
 echo "Starting git-crypt-team at $(date)"
 
