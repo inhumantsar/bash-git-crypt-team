@@ -7,7 +7,8 @@ BACKUP_PATH="${CONFIG_PATH}/backup"
 BRANCH="rekey-git-crypt-$(date +%Y%m%d%H%M)"
 ENC_FILE="${BACKUP_PATH}/encfiles"
 TEAM_FILE="${CONFIG_PATH}/teamfile"
-TMP_TEAM_FILE="${CONFIG_PATH}/tmp-teamfile-$(date +%Y%m%d%H%M)"
+TMP_TEAM_FILE_PREFIX="${CONFIG_PATH}/tmp-teamfile"
+TMP_TEAM_FILE="${TMP_TEAM_FILE_PREFIX}-$(date +%Y%m%d%H%M%S)"
 URL_FILE="${CONFIG_PATH}/url"
 
 # init
@@ -73,9 +74,31 @@ edit_team_file() {
   set +e
   get_team_file || echo "WARNING: No remote file found, creating a new one."
   set -e
+
   heading "Passing file to editor..."
-  vim "${TMP_TEAM_FILE}"
-  echo -n "Changes will be lost if not uploaded. Upload? [Ny] " && read yn
+  find_editor
+  if [ "$GCT_EDITOR" == "" ]; then
+    echo 'ERROR: No text editor found'
+    return
+  fi
+  $GCT_EDITOR "${TMP_TEAM_FILE}"
+
+  heading "Checking syntax..."
+
+  set +e
+  until jq '.' "${TMP_TEAM_FILE}" > /dev/null; do
+    echo -n "Re-edit? [Yn] " && read yn
+    if [ $(echo "${yn}" | grep -i "Y") ] || [ "${yn}" == "" ]; then
+      vim "${TMP_TEAM_FILE}"
+    else
+      echo "ERROR: JSON is bad but user won't re-edit. Have to bail out."
+      return
+    fi
+  done
+  set -e
+
+  heading "Changes will be lost if not uploaded."
+  echo -n "Upload? [Ny] " && read yn
   if [ $(echo "${yn}" | grep -i "Y") ]; then
     heading "Uploading..."
     aws s3 cp "${TMP_TEAM_FILE}" "${url}"
@@ -91,14 +114,14 @@ rekey() {
   done < <(find . -type d -name "*git-crypt" -print0)
   if [ ${#gc_dirs[@]} -lt 1 ]; then
     echo "ERROR: No git-crypt directory found. Perhaps you meant to use `-n`?"
-    exit 1
+    return
   fi
 
 	# find text editor
 	find_editor
 	if [ "$GCT_EDITOR" == "" ]; then
 		echo "ERROR: Unable to find a known text editor. You don't use emacs, do you? ;)"
-		exit 1
+		return
 	fi
 
   heading "Ensuring repo is unlocked..."
@@ -272,8 +295,8 @@ echo "Starting git-crypt-team at $(date)"
 
 if [ $preserve -eq 0 ]; then
   heading "Removing unencrypted backups and temp files..."
-  rm -rf "${BACKUP_PATH}/*"
-  rm -rf "${TMP_TEAM_FILE}"
+  rm -rvf "${BACKUP_PATH}/*"
+  rm -rvf $TMP_TEAM_FILE_PREFIX-*
 fi
 
 
