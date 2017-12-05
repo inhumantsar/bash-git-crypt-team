@@ -1,1 +1,3 @@
 .git-crypt-team/
+*.rpm
+*.deb
