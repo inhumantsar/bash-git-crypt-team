@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # constants
+GCT_VERSION="1.0.2"
 COMMIT_PREFIX="git-crypt rekey"
 CONFIG_PATH=".git-crypt-team"
 BACKUP_PATH="${CONFIG_PATH}/backup"
@@ -25,6 +26,7 @@ set -e
 
 usage() {
   echo "$0 -v|e|r|n [-h] [-u S3 url] [-s] [-p] [-f]"
+  echo "Version ${GCT_VERSION}"
   echo ""
   echo "Rekey git-crypt'd repo with a userlist stored in S3"
   echo ""
