@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # constants
+GCT_VERSION="1.0.3"
 COMMIT_PREFIX="git-crypt rekey"
 CONFIG_PATH=".git-crypt-team"
 BACKUP_PATH="${CONFIG_PATH}/backup"
@@ -25,6 +26,7 @@ set -e
 
 usage() {
   echo "$0 -v|e|r|n [-h] [-u S3 url] [-s] [-p] [-f]"
+  echo "Version ${GCT_VERSION}"
   echo ""
   echo "Rekey git-crypt'd repo with a userlist stored in S3"
   echo ""
@@ -165,7 +167,7 @@ rekey() {
   done
 
   heading "Committing changes..."
-  gitcommit "removing encrypted files"
+  gitcommit "removing encrypted files" || echo "WARNING: Nothing to commit."
 
   heading "Clearing git-crypt configuration..."
   for d in $gc_dirs; do
@@ -173,7 +175,7 @@ rekey() {
   done
 
   heading "Committing changes..."
-  gitcommit "clearing git-crypt configuration"
+  gitcommit "clearing git-crypt configuration" || echo "WARNING: Nothing to commit."
 
   heading "Copying decrypted secure files back into repo..."
   for f in `cat $ENC_FILE`; do
