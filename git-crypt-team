@@ -167,7 +167,7 @@ rekey() {
   done
 
   heading "Committing changes..."
-  gitcommit "removing encrypted files"
+  gitcommit "removing encrypted files" || echo "WARNING: Nothing to commit."
 
   heading "Clearing git-crypt configuration..."
   for d in $gc_dirs; do
@@ -175,7 +175,7 @@ rekey() {
   done
 
   heading "Committing changes..."
-  gitcommit "clearing git-crypt configuration"
+  gitcommit "clearing git-crypt configuration" || echo "WARNING: Nothing to commit."
 
   heading "Copying decrypted secure files back into repo..."
   for f in `cat $ENC_FILE`; do
