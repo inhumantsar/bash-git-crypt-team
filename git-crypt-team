@@ -147,7 +147,7 @@ rekey() {
   echo "Done!"
 
   heading "Importing GPG keys..."
-  gpg --recv-keys $newteamfile
+  gpg --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys $newteamfile
 
   heading "Signing GPG keys..."
   for k in $newteamfile; do
@@ -218,7 +218,7 @@ new() {
   echo "Done!"
 
   heading "Importing GPG keys..."
-  gpg --recv-keys $newteamfile
+  gpg --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys $newteamfile
 
   heading "Signing GPG keys..."
   for k in $newteamfile; do
